@@ -83,8 +83,8 @@ footer a{color:var(--ink-2)}
     <div class="sub">KPIs: last 7 days, change vs the 7 days before</div>
     <div class="range" role="group" aria-label="Chart range">
       <button type="button" id="r7" data-days="7" aria-pressed="false">7 days</button>
-      <button type="button" id="r14" data-days="14" aria-pressed="false">14 days</button>
-      <button type="button" id="r30" data-days="30" aria-pressed="true">30 days</button>
+      <button type="button" id="r14" data-days="14" aria-pressed="true">14 days</button>
+      <button type="button" id="r30" data-days="30" aria-pressed="false">30 days</button>
     </div>
   </div>
   <section class="kpis" id="kpis"></section>
@@ -154,7 +154,8 @@ const KPIS = [
 document.getElementById("kpis").innerHTML = KPIS.map(([label, key, f, upIsGood]) => {
   const ch = S.change[key];
   let d = "no prior data";
-  if (ch != null) {
+  if (ch == null && S.current[key] === 0 && S.previous[key] === 0) d = "flat vs prior 7 days";
+  else if (ch != null) {
     const good = (ch >= 0) === upIsGood;
     d = `<span class="${Math.abs(ch) < 0.005 ? "" : good ? "good" : "bad"}">${ch >= 0 ? "▲" : "▼"} ${Math.abs(ch * 100).toFixed(0)}%</span> vs prior 7 days`;
   }
@@ -194,7 +195,7 @@ function axes(svg, m, iw, ih, lo, hi, step, days, yfmt) {
 
 function tipRows(d) {
   return `<div style="margin-bottom:4px;color:var(--ink-2)">${fmtDay(d.date)} · ${d.orders} order${d.orders === 1 ? "" : "s"}</div>` +
-    [["Revenue", money(d.revenue)], ["Ad spend", money(d.ad_spend)], ["Profit", money(d.profit)], ["ROAS", x2(d.roas)]]
+    [["Revenue", money(d.revenue)], ["Ad spend", money(d.ad_spend)], ["Profit", money(d.profit)], ["ROAS", d.revenue ? x2(d.roas) : "–"]]
       .map(([k, v]) => `<div class="row"><span class="lab">${k}</span><span>${v}</span></div>`).join("");
 }
 function showTip(el, tip, x, y, html) {
@@ -213,12 +214,19 @@ function lineChart(el, days) {
   const X = i => m.l + (days.length === 1 ? iw / 2 : i / (days.length - 1) * iw);
   const Y = v => m.t + ih - v / hi * ih;
   const series = [["revenue", "var(--revenue)", "Revenue"], ["ad_spend", "var(--spend)", "Ad spend"]];
+  const last = days[days.length - 1], labels = [];
   for (const [k, c, label] of series) {
     add(svg, "path", {d: days.map((d, i) => (i ? "L" : "M") + X(i) + "," + Y(d[k])).join(""), fill: "none", stroke: c, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"});
-    const last = days[days.length - 1];
     add(svg, "circle", {cx: X(days.length - 1), cy: Y(last[k]), r: 4, fill: c, stroke: "var(--surface)", "stroke-width": 2});
-    add(svg, "text", {x: X(days.length - 1) + 10, y: Y(last[k]) + 4, fill: "var(--ink-2)", "font-size": 11}, label);
+    labels.push({label, y: Y(last[k]) + 4});
   }
+  labels.sort((a, b) => a.y - b.y);
+  if (labels[1].y - labels[0].y < 14) {
+    const mid = (labels[0].y + labels[1].y) / 2;
+    labels[0].y = mid - 7; labels[1].y = mid + 7;
+    if (labels[1].y > m.t + ih + 4) { labels[1].y = m.t + ih + 4; labels[0].y = labels[1].y - 14; }
+  }
+  for (const l of labels) add(svg, "text", {x: X(days.length - 1) + 10, y: l.y, fill: "var(--ink-2)", "font-size": 11}, l.label);
   const cross = add(svg, "line", {y1: m.t, y2: m.t + ih, stroke: "var(--ink-3)", "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden"});
   const hit = add(svg, "rect", {x: m.l, y: m.t, width: iw, height: ih, fill: "transparent"});
   const move = e => {
@@ -266,7 +274,7 @@ function barChart(el, days) {
 function table(days) {
   const cols = [["Date", d => fmtDay(d.date)], ["Orders", d => d.orders], ["Revenue", d => money(d.revenue, 2)],
     ["Refunds", d => money(d.refunds, 2)], ["Product costs", d => money(d.cogs, 2)], ["Fees", d => money(d.fees, 2)],
-    ["Ad spend", d => money(d.ad_spend, 2)], ["Profit", d => money(d.profit, 2)], ["ROAS", d => x2(d.roas)],
+    ["Ad spend", d => money(d.ad_spend, 2)], ["Profit", d => money(d.profit, 2)], ["ROAS", d => d.revenue ? x2(d.roas) : "–"],
     ["AOV", d => money(d.aov, 2)], ["Refund rate", d => pct(d.refund_rate)]];
   document.getElementById("tbl").innerHTML =
     "<thead><tr>" + cols.map(c => `<th>${c[0]}</th>`).join("") + "</tr></thead><tbody>" +
@@ -282,7 +290,7 @@ function render(n) {
   document.querySelectorAll(".range button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.days === n)));
 }
 document.querySelectorAll(".range button").forEach(b => b.addEventListener("click", () => render(+b.dataset.days)));
-render(30);
+render(14);
 </script>
 </body>
 </html>
