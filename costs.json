@@ -1,0 +1,22 @@
+{
+  "_note": "Unit costs and fee assumptions. Edit to match your store. Products not listed are costed at default_cost_pct of the order value.",
+  "products": {
+    "Linen Tote Bag": 11.50,
+    "Ceramic Mug": 7.20,
+    "Soy Candle": 8.40,
+    "Leather Card Holder": 14.00,
+    "Cotton Throw Blanket": 31.00,
+    "Stoneware Bowl Set": 22.50
+  },
+  "prices": {
+    "Linen Tote Bag": 34.00,
+    "Ceramic Mug": 22.00,
+    "Soy Candle": 28.00,
+    "Leather Card Holder": 45.00,
+    "Cotton Throw Blanket": 89.00,
+    "Stoneware Bowl Set": 64.00
+  },
+  "default_cost_pct": 0.35,
+  "payment_fee_pct": 0.029,
+  "payment_fee_fixed": 0.30
+}

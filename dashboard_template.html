@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shopify Profit Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: header strip, KPI row (last 7 days vs previous 7), two charts, daily table.
+   Deliberately single-theme: the brand's Midnight surface. */
+:root{
+  --bg:#0E141B; --surface:#141C25; --line:#253141; --grid:#1E2834;
+  --ink:#F3F1EC; --ink-2:#B9BDC3; --ink-3:#7E8792; --accent:#F27A2E;
+  --revenue:#3987e5; --spend:#d95926; --profit:#199e70;
+  --sans:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-block:32px 56px;
+  padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:28px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;margin:4px 0 0}
+.meta{font-size:13px;color:var(--ink-3);text-align:right}
+.meta b{color:var(--ink-2);font-weight:500}
+.notice{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:10px 14px;
+  font-size:13px;color:var(--ink-2);background:var(--surface)}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0}
+.kpi .k{font-size:12px;color:var(--ink-3);letter-spacing:.02em}
+.kpi .v{font-size:24px;font-weight:600;letter-spacing:-.01em;margin-top:4px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kpi .d{font-size:12px;color:var(--ink-2);margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .d .good{color:#6fcf9f}.kpi .d .bad{color:#f08a8a}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px 18px 10px;min-width:0}
+.ph{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+h2{font-size:15px;font-weight:600;margin:0}
+.sub{font-size:12px;color:var(--ink-3)}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2)}
+.legend i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:6px;border-radius:1px}
+.charts{display:grid;grid-template-columns:3fr 2fr;gap:16px}
+.chart{position:relative;width:100%}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:#0B1016;border:1px solid var(--line);border-radius:6px;
+  padding:8px 10px;font-size:12px;color:var(--ink);white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.4);
+  font-variant-numeric:tabular-nums}
+.tip[hidden]{display:none}
+.tip .row{display:flex;justify-content:space-between;gap:14px}
+.tip .lab{color:var(--ink-3)}
+.range{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:3px}
+.range button{font:inherit;font-size:12px;color:var(--ink-2);background:none;border:0;border-radius:5px;padding:5px 10px;cursor:pointer}
+.range button[aria-pressed="true"]{background:var(--line);color:var(--ink)}
+.range button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--grid);white-space:nowrap}
+th{font-weight:500;color:var(--ink-3);font-size:12px}
+td:first-child,th:first-child{text-align:left}
+td.neg{color:#f08a8a}
+footer{font-size:12px;color:var(--ink-3);display:flex;flex-direction:column;gap:4px}
+footer a{color:var(--ink-2)}
+@media (max-width:980px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.charts{grid-template-columns:1fr}}
+@media (max-width:520px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.meta{text-align:left}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Shopify profit dashboard</div>
+      <h1 id="shop">Store</h1>
+    </div>
+    <div class="meta">Updated <b id="updated"></b><br>Timezone <span id="tz"></span></div>
+  </header>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <div class="ph" style="margin:0">
+    <div class="sub">KPIs: last 7 days, change vs the 7 days before</div>
+    <div class="range" role="group" aria-label="Chart range">
+      <button type="button" id="r7" data-days="7" aria-pressed="false">7 days</button>
+      <button type="button" id="r14" data-days="14" aria-pressed="false">14 days</button>
+      <button type="button" id="r30" data-days="30" aria-pressed="true">30 days</button>
+    </div>
+  </div>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="charts">
+    <div class="panel">
+      <div class="ph">
+        <div><h2>Revenue and ad spend</h2><div class="sub">Per day</div></div>
+        <div class="legend"><span><i style="background:var(--revenue)"></i>Revenue</span><span><i style="background:var(--spend)"></i><span id="spendLabel">Ad spend</span></span></div>
+      </div>
+      <div class="chart" id="c1"></div>
+    </div>
+    <div class="panel">
+      <div class="ph">
+        <div><h2>Profit after costs, fees and ads</h2><div class="sub">Per day</div></div>
+      </div>
+      <div class="chart" id="c2"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="ph"><h2>Daily breakdown</h2><div class="sub"><a href="data.csv" style="color:var(--ink-2)">Download CSV</a></div></div>
+    <div class="tablewrap"><table id="tbl"></table></div>
+  </section>
+
+  <footer>
+    <div id="assume"></div>
+    <div>Built with Python, the Shopify Admin API and GitHub Actions. Rebuilt every morning. <a href="https://github.com/riadmrad1992-blip/shopify-profit-dashboard">Source on GitHub</a></div>
+  </footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const cur = DATA.currency;
+const money = (v, dp = 0) => v == null ? "–" : new Intl.NumberFormat("en-US", {style: "currency", currency: cur, maximumFractionDigits: dp, minimumFractionDigits: dp}).format(v);
+const pct = (v, dp = 1) => v == null ? "–" : (v * 100).toFixed(dp) + "%";
+const x2 = v => v == null ? "–" : v.toFixed(2) + "×";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtDay = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", {day: "numeric", month: "short"});
+
+document.getElementById("shop").textContent = DATA.shop;
+document.getElementById("updated").textContent = DATA.generated_at;
+document.getElementById("tz").textContent = DATA.timezone;
+if (DATA.spend_simulated || DATA.sample) {
+  const n = document.getElementById("notice");
+  n.hidden = false;
+  n.textContent = DATA.sample
+    ? "Sample data for preview. Orders and ad spend are generated."
+    : "Test store. Sales and refunds come from the store's orders; ad spend is simulated because no ad account is connected.";
+  document.getElementById("spendLabel").textContent = "Ad spend (simulated)";
+}
+const A = DATA.assumptions;
+document.getElementById("assume").textContent =
+  `Profit = revenue − refunds − product costs − payment fees (${(A.payment_fee_pct*100).toFixed(1)}% + ${money(A.payment_fee_fixed,2)} per order) − ad spend. ` +
+  `Products without a cost in costs.json are costed at ${(A.default_cost_pct*100).toFixed(0)}% of order value. Cost per order = ad spend ÷ orders.`;
+
+// ---------- KPI tiles ----------
+const S = DATA.summary;
+const KPIS = [
+  ["Revenue", "revenue", v => money(v), true],
+  ["Profit", "profit", v => money(v), true],
+  ["ROAS", "roas", x2, true],
+  ["Avg order value", "aov", v => money(v, 2), true],
+  ["Cost per order", "cost_per_order", v => money(v, 2), false],
+  ["Refund rate", "refund_rate", v => pct(v), false],
+];
+document.getElementById("kpis").innerHTML = KPIS.map(([label, key, f, upIsGood]) => {
+  const ch = S.change[key];
+  let d = "no prior data";
+  if (ch != null) {
+    const good = (ch >= 0) === upIsGood;
+    d = `<span class="${Math.abs(ch) < 0.005 ? "" : good ? "good" : "bad"}">${ch >= 0 ? "▲" : "▼"} ${Math.abs(ch * 100).toFixed(0)}%</span> vs prior 7 days`;
+  }
+  return `<div class="kpi"><div class="k">${label}</div><div class="v">${f(S.current[key])}</div><div class="d">${d}</div></div>`;
+}).join("");
+
+// ---------- charts (hand-rolled SVG, one $ axis each) ----------
+const NS = "http://www.w3.org/2000/svg";
+function niceStep(raw) { if (raw <= 0) return 1; const p = 10 ** Math.floor(Math.log10(raw)), f = raw / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; }
+function niceScale(lo, hi, n = 4) { const step = niceStep((hi - lo) / n || 1); return {lo: Math.floor(lo / step) * step, hi: Math.ceil(hi / step) * step, step}; }
+function ticks(lo, hi, step) { const out = []; for (let t = lo; t <= hi + step / 2; t += step) out.push(Math.round(t * 100) / 100); return out; }
+
+function frame(el, W, H, m) {
+  el.innerHTML = "";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("role", "img");
+  el.appendChild(svg);
+  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; el.appendChild(tip);
+  return {svg, tip, iw: W - m.l - m.r, ih: H - m.t - m.b};
+}
+const add = (p, tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; p.appendChild(e); return e; };
+
+function axes(svg, m, iw, ih, lo, hi, step, days, yfmt) {
+  for (const t of ticks(lo, hi, step)) {
+    const y = m.t + ih - (t - lo) / (hi - lo) * ih;
+    add(svg, "line", {x1: m.l, x2: m.l + iw, y1: y, y2: y, stroke: t === 0 && lo < 0 ? "#3A4757" : "var(--grid)", "stroke-width": 1});
+    add(svg, "text", {x: m.l - 8, y: y + 4, "text-anchor": "end", fill: "var(--ink-3)", "font-size": 11}, yfmt(t));
+  }
+  const every = Math.ceil(days.length / 6);
+  days.forEach((d, i) => {
+    if ((days.length - 1 - i) % every) return;
+    const x = m.l + (days.length === 1 ? iw / 2 : i / (days.length - 1) * iw);
+    add(svg, "text", {x, y: m.t + ih + 18, "text-anchor": "middle", fill: "var(--ink-3)", "font-size": 11}, fmtDay(d.date));
+  });
+}
+
+function tipRows(d) {
+  return `<div style="margin-bottom:4px;color:var(--ink-2)">${fmtDay(d.date)} · ${d.orders} order${d.orders === 1 ? "" : "s"}</div>` +
+    [["Revenue", money(d.revenue)], ["Ad spend", money(d.ad_spend)], ["Profit", money(d.profit)], ["ROAS", x2(d.roas)]]
+      .map(([k, v]) => `<div class="row"><span class="lab">${k}</span><span>${v}</span></div>`).join("");
+}
+function showTip(el, tip, x, y, html) {
+  tip.innerHTML = html; tip.hidden = false;
+  const r = el.getBoundingClientRect(), tw = tip.offsetWidth;
+  const left = x / el.querySelector("svg").viewBox.baseVal.width * r.width;
+  tip.style.left = Math.min(Math.max(left - tw / 2, 0), r.width - tw) + "px";
+  tip.style.top = Math.max(y / el.querySelector("svg").viewBox.baseVal.height * r.height - tip.offsetHeight - 14, 0) + "px";
+}
+
+function lineChart(el, days) {
+  const W = 680, H = 300, m = {t: 16, r: 92, b: 30, l: 56};
+  const {svg, tip, iw, ih} = frame(el, W, H, m);
+  const sc = niceScale(0, Math.max(1, ...days.map(d => Math.max(d.revenue, d.ad_spend)))), hi = sc.hi;
+  axes(svg, m, iw, ih, 0, hi, sc.step, days, v => money(v));
+  const X = i => m.l + (days.length === 1 ? iw / 2 : i / (days.length - 1) * iw);
+  const Y = v => m.t + ih - v / hi * ih;
+  const series = [["revenue", "var(--revenue)", "Revenue"], ["ad_spend", "var(--spend)", "Ad spend"]];
+  for (const [k, c, label] of series) {
+    add(svg, "path", {d: days.map((d, i) => (i ? "L" : "M") + X(i) + "," + Y(d[k])).join(""), fill: "none", stroke: c, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"});
+    const last = days[days.length - 1];
+    add(svg, "circle", {cx: X(days.length - 1), cy: Y(last[k]), r: 4, fill: c, stroke: "var(--surface)", "stroke-width": 2});
+    add(svg, "text", {x: X(days.length - 1) + 10, y: Y(last[k]) + 4, fill: "var(--ink-2)", "font-size": 11}, label);
+  }
+  const cross = add(svg, "line", {y1: m.t, y2: m.t + ih, stroke: "var(--ink-3)", "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden"});
+  const hit = add(svg, "rect", {x: m.l, y: m.t, width: iw, height: ih, fill: "transparent"});
+  const move = e => {
+    const r = svg.getBoundingClientRect();
+    const sx = (e.clientX - r.left) / r.width * W;
+    const i = Math.max(0, Math.min(days.length - 1, Math.round((sx - m.l) / iw * (days.length - 1))));
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("visibility", "visible");
+    showTip(el, tip, X(i), Y(Math.max(days[i].revenue, days[i].ad_spend)), tipRows(days[i]));
+  };
+  hit.addEventListener("pointermove", move);
+  hit.addEventListener("pointerleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); });
+}
+
+function barPath(x, w, y0, y1, r) {
+  // rounded corners on the data end only; flat at the zero baseline
+  const up = y1 < y0, h = Math.abs(y1 - y0); r = Math.min(r, h, w / 2);
+  if (h < 0.5) return "";
+  return up
+    ? `M${x},${y0} V${y1 + r} Q${x},${y1} ${x + r},${y1} H${x + w - r} Q${x + w},${y1} ${x + w},${y1 + r} V${y0} Z`
+    : `M${x},${y0} V${y1 - r} Q${x},${y1} ${x + r},${y1} H${x + w - r} Q${x + w},${y1} ${x + w},${y1 - r} V${y0} Z`;
+}
+
+function barChart(el, days) {
+  const W = 460, H = 300, m = {t: 16, r: 12, b: 30, l: 56};
+  const {svg, tip, iw, ih} = frame(el, W, H, m);
+  const maxV = Math.max(0, ...days.map(d => d.profit)), minV = Math.min(0, ...days.map(d => d.profit));
+  const sc = niceScale(minV, Math.max(maxV, 1)), hi = sc.hi, lo = sc.lo;
+  axes(svg, m, iw, ih, lo, hi, sc.step, days, v => money(v));
+  const Y = v => m.t + ih - (v - lo) / (hi - lo) * ih;
+  const slot = iw / days.length, bw = Math.max(Math.min(slot - 2, 18), 2);
+  days.forEach((d, i) => {
+    const x = m.l + i * slot + (slot - bw) / 2;
+    add(svg, "path", {d: barPath(x, bw, Y(0), Y(d.profit), 4), fill: "var(--profit)"});
+    const h = add(svg, "rect", {x: m.l + i * slot, y: m.t, width: slot, height: ih, fill: "transparent"});
+    h.addEventListener("pointerenter", () => showTip(el, tip, x + bw / 2, Math.min(Y(d.profit), Y(0)), tipRows(d)));
+    h.addEventListener("pointerleave", () => { tip.hidden = true; });
+  });
+  // fix the day labels to bar centres
+  svg.querySelectorAll("text[text-anchor='middle']").forEach(t => t.remove());
+  const every = Math.ceil(days.length / 5);
+  days.forEach((d, i) => { if ((days.length - 1 - i) % every) return;
+    add(svg, "text", {x: m.l + i * slot + slot / 2, y: m.t + ih + 18, "text-anchor": "middle", fill: "var(--ink-3)", "font-size": 11}, fmtDay(d.date)); });
+}
+
+function table(days) {
+  const cols = [["Date", d => fmtDay(d.date)], ["Orders", d => d.orders], ["Revenue", d => money(d.revenue, 2)],
+    ["Refunds", d => money(d.refunds, 2)], ["Product costs", d => money(d.cogs, 2)], ["Fees", d => money(d.fees, 2)],
+    ["Ad spend", d => money(d.ad_spend, 2)], ["Profit", d => money(d.profit, 2)], ["ROAS", d => x2(d.roas)],
+    ["AOV", d => money(d.aov, 2)], ["Refund rate", d => pct(d.refund_rate)]];
+  document.getElementById("tbl").innerHTML =
+    "<thead><tr>" + cols.map(c => `<th>${c[0]}</th>`).join("") + "</tr></thead><tbody>" +
+    days.slice().reverse().map(d => "<tr>" + cols.map(([n, f]) => `<td class="${n === "Profit" && d.profit < 0 ? "neg" : ""}">${esc(f(d))}</td>`).join("") + "</tr>").join("") +
+    "</tbody>";
+}
+
+function render(n) {
+  const days = DATA.days.slice(-n);
+  lineChart(document.getElementById("c1"), days);
+  barChart(document.getElementById("c2"), days);
+  table(days);
+  document.querySelectorAll(".range button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.days === n)));
+}
+document.querySelectorAll(".range button").forEach(b => b.addEventListener("click", () => render(+b.dataset.days)));
+render(30);
+</script>
+</body>
+</html>

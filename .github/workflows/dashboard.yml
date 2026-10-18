@@ -1,0 +1,74 @@
+name: Profit dashboard
+on:
+  schedule:
+    - cron: "15 6 * * *"     # every day at 06:15 UTC (9:15 Beirut); Mondays also send the email
+  workflow_dispatch:
+    inputs:
+      send_email:
+        description: "Send the weekly email now"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SHOPIFY_STORE: ${{ secrets.SHOPIFY_STORE }}
+      SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+      SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Build dashboard from live Shopify data
+        run: python build_dashboard.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Weekly email (Mondays, or when requested)
+        env:
+          SEND: ${{ inputs.send_email }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          REPORT_TO: ${{ secrets.REPORT_TO }}
+        run: |
+          if [ "$(date -u +%u)" = "1" ] || [ "$SEND" = "true" ]; then
+            if [ -z "$GMAIL_APP_PASSWORD" ]; then echo "Email secrets not set, skipping."; exit 0; fi
+            python weekly_email.py
+          else
+            echo "Not Monday, no email today."
+          fi
+      - name: Alert Slack if this run failed
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json' \
+              -d "{\"text\":\":rotating_light: *Profit dashboard build failed.* Yesterday's numbers are still live. Details: $RUN_URL\"}" \
+              "$SLACK_WEBHOOK_URL"
+          fi
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
