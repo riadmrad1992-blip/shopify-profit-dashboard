@@ -107,7 +107,8 @@ def finish_row(d, r, spend, spend_simulated=False):
         "ad_spend": round(spend, 2),
         "ad_spend_simulated": spend_simulated,
         "profit": round(profit, 2),
-        "roas": round(r["revenue"] / spend, 2) if spend else None,
+        # no sales that day -> ROAS is "not applicable", not 0x
+        "roas": round(r["revenue"] / spend, 2) if spend and r["revenue"] else None,
         "aov": round(r["revenue"] / r["orders"], 2) if r["orders"] else None,
         "cost_per_order": round(spend / r["orders"], 2) if r["orders"] else None,
         "refund_rate": round(r["refunds"] / r["revenue"], 4) if r["revenue"] else None,

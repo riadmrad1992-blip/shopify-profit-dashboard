@@ -2,6 +2,8 @@ name: Profit dashboard
 on:
   schedule:
     - cron: "15 6 * * *"     # every day at 06:15 UTC (9:15 Beirut); Mondays also send the email
+  push:
+    branches: [main]         # redeploy when the code changes
   workflow_dispatch:
     inputs:
       send_email:

@@ -70,6 +70,11 @@ class DailyTests(unittest.TestCase):
         self.assertTrue(a["ad_spend_simulated"])
         self.assertTrue(2.0 < a["roas"] < 5.0)
 
+    def test_no_sales_day_has_no_roas(self):
+        r = m.daily_metrics([], {DAY: 20.0}, COSTS, DAY, 1)[0]
+        self.assertIsNone(r["roas"])
+        self.assertEqual(r["profit"], -20.0)
+
 
 class SummaryTests(unittest.TestCase):
     def test_ratios_come_from_totals_not_averages(self):
